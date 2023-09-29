@@ -57,11 +57,9 @@ async def handle_request(reader, writer):
         decoded['39'] = '01'
         decoded.pop('2', None)
 
-        encoded_raw, encoded = iso8583.encode(decoded, spec)
-        writer.write(encoded_raw)
+        msg, encoded = iso8583.encode(decoded, spec)
     except Exception as e:
         log.exception(e)
-        writer.write(msg)
 
     log.debug(f"Send: {msg!r} to {addr!r}")
     writer.write(msg)
