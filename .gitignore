@@ -1,0 +1,15 @@
+*.pyc
+*.egg-info
+*.sw?
+.project
+.pydevproject
+.settings
+.coverage
+bin
+lib
+lib64
+share
+man
+pyvenv.cfg
+pip-selfcheck.json
+.idea/*
