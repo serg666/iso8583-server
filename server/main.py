@@ -5,6 +5,7 @@ import logging.config
 import asyncio
 import iso8583
 import optparse
+import server.utils as utils
 
 from iso8583.specs import default_ascii as spec
 
@@ -28,13 +29,6 @@ class Option(optparse.Option, object):
         values._seen[self.dest] = True
 
 
-def build_response_mti(mti):
-    """Build response MTI (message type identifier)
-    """
-
-    return mti[:2] + str(int(mti[2]) + 1) + mti[3]
-
-
 class ISO8583Protocol(asyncio.Protocol):
     def connection_made(self, transport):
         self.addr = transport.get_extra_info('peername')
@@ -49,9 +43,9 @@ class ISO8583Protocol(asyncio.Protocol):
 
         try:
             decoded, encoded = iso8583.decode(msg, spec)
-            log.debug(f"Decoded msg {decoded!r} from {self.addr!r}")
+            log.debug(f"Decoded msg {utils.mask_ddk(decoded)!r} from {self.addr!r}")
 
-            decoded['t'] = build_response_mti(decoded['t'])
+            decoded['t'] = utils.build_response_mti(decoded['t'])
             decoded['39'] = '01'
             decoded.pop('2', None)
 
