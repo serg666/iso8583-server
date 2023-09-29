@@ -8,7 +8,6 @@ import optparse
 
 from iso8583.specs import default_ascii as spec
 
-BUFFER_SIZE = 65536
 log = logging.getLogger(__name__)
 
 
@@ -36,43 +35,43 @@ def build_response_mti(mti):
     return mti[:2] + str(int(mti[2]) + 1) + mti[3]
 
 
-async def handle_request(reader, writer):
-    msg = b''
+class ISO8583Protocol(asyncio.Protocol):
+    def connection_made(self, transport):
+        self.addr = transport.get_extra_info('peername')
+        log.debug(f"Connection from {self.addr!r}")
+        self.transport = transport
 
-    while True:
-        data = await reader.read(BUFFER_SIZE)
-        msg += data
+    def connection_lost(self, exc):
+        log.debug(f"Connection to {self.addr!r} closed")
 
-        if len(data) < BUFFER_SIZE:
-            break
+    def data_received(self, msg):
+        log.debug(f"Received {msg!r} from {self.addr!r}")
 
-    addr = writer.get_extra_info('peername')
-    log.debug(f"Received {msg!r} from {addr!r}")
+        try:
+            decoded, encoded = iso8583.decode(msg, spec)
+            log.debug(f"Decoded msg {decoded!r} from {self.addr!r}")
 
-    try:
-        decoded, encoded = iso8583.decode(msg, spec)
-        log.debug(f"Decoded msg {decoded!r} from {addr!r}")
+            decoded['t'] = build_response_mti(decoded['t'])
+            decoded['39'] = '01'
+            decoded.pop('2', None)
 
-        decoded['t'] = build_response_mti(decoded['t'])
-        decoded['39'] = '01'
-        decoded.pop('2', None)
+            msg, encoded = iso8583.encode(decoded, spec)
+        except Exception as e:
+            log.exception(e)
 
-        msg, encoded = iso8583.encode(decoded, spec)
-    except Exception as e:
-        log.exception(e)
+        log.debug(f"Send: {msg!r} to {self.addr!r}")
+        self.transport.write(msg)
 
-    log.debug(f"Send: {msg!r} to {addr!r}")
-    writer.write(msg)
-    await writer.drain()
-
-    log.debug(f"Close the connection with {addr!r}")
-    writer.close()
-    await writer.wait_closed()
+        #print('Close the client socket')
+        #self.transport.close()
 
 
 async def start_server(options):
-    server = await asyncio.start_server(
-        handle_request, options.host, options.port)
+    loop = asyncio.get_running_loop()
+
+    server = await loop.create_server(
+        lambda: ISO8583Protocol(),
+        options.host, options.port)
 
     addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
     log.debug(f'Serving on {addrs}')
