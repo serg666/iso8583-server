@@ -45,7 +45,7 @@ class ISO8583Protocol(asyncio.Protocol):
         log.debug(f"Connection to {self.addr!r} closed")
 
     def data_received(self, msg):
-        log.debug(f"Received {msg!r} from {self.addr!r}")
+        log.debug(f"Received hex {msg.hex()!r} from {self.addr!r}")
 
         try:
             decoded, encoded = iso8583.decode(msg, spec)
@@ -59,7 +59,7 @@ class ISO8583Protocol(asyncio.Protocol):
         except Exception as e:
             log.exception(e)
 
-        log.debug(f"Send: {msg!r} to {self.addr!r}")
+        log.debug(f"Send: {msg.hex()!r} to {self.addr!r}")
         self.transport.write(msg)
 
         #print('Close the client socket')
