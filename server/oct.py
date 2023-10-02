@@ -13,8 +13,8 @@ log = logging.getLogger(__name__)
 
 
 async def process_message(message, session, options):
+    log.debug(f"process message: {utils.mask_ddk(message)!r}")
     trx = message['37']
-    log.debug(f"process message with trx: {trx!r}")
     params = {
         "recipient_pan": message['2'],
         "amount": message['4'],
