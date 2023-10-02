@@ -13,12 +13,13 @@ log = logging.getLogger(__name__)
 
 
 async def process_message(message, session, options):
-    log.debug(f"process message with STAN: {message['11']!r}")
+    trx = message['37']
+    log.debug(f"process message with trx: {trx!r}")
     params = {
         "recipient_pan": message['2'],
         "amount": message['4'],
-        "transaction": message['11'],
-        "description": "payout_{}".format(message['11'])
+        "transaction": trx,
+        "description": "payout_{}".format(trx)
     }
 
     data = json.dumps(params, separators=(',', ':'), sort_keys=True)
@@ -36,9 +37,9 @@ async def process_message(message, session, options):
     }
 
     async with session.post('/v1/orders/account2card', data=data, headers=headers) as resp:
-        log.debug(f"result http code {resp.status!r} for message with STAN {message['11']!r}")
+        log.debug(f"result http code {resp.status!r} for message with trx {trx!r}")
         result = await resp.json()
-        log.debug(f"result {result!r} for message with STAN {message['11']!r}")
+        log.debug(f"result {result!r} for message with trx {trx!r}")
 
         message['t'] = utils.build_response_mti(message['t'])
         message.pop('2', None)
