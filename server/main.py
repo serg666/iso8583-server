@@ -6,6 +6,7 @@ import asyncio
 import iso8583
 import optparse
 import server.utils as utils
+import server.oct as oct
 
 from iso8583.specs import default_ascii as spec
 
@@ -30,6 +31,10 @@ class Option(optparse.Option, object):
 
 
 class ISO8583Protocol(asyncio.Protocol):
+    def __init__(self, options, *args, **kwargs):
+        self.options = options
+        super(ISO8583Protocol, self).__init__(*args, **kwargs)
+
     def connection_made(self, transport):
         self.addr = transport.get_extra_info('peername')
         log.debug(f"Connection from {self.addr!r}")
@@ -38,23 +43,39 @@ class ISO8583Protocol(asyncio.Protocol):
     def connection_lost(self, exc):
         log.debug(f"Connection to {self.addr!r} closed")
 
-    def data_received(self, msg):
-        log.debug(f"Received hex {msg.hex()!r} from {self.addr!r}")
-
+    def messages_processed(self, task):
         try:
-            decoded, encoded = iso8583.decode(msg, spec)
-            log.debug(f"Decoded msg {utils.mask_ddk(decoded)!r} from {self.addr!r}")
+            messages = task.result()
 
-            decoded['t'] = utils.build_response_mti(decoded['t'])
-            decoded['39'] = '01'
-            decoded.pop('2', None)
+            total_msg = b''
+            for message in messages:
+                msg, encoded = iso8583.encode(message, spec)
+                total_msg += msg
 
-            msg, encoded = iso8583.encode(decoded, spec)
+            log.debug(f"Send processed: {total_msg.hex()!r} to {self.addr!r}")
+            self.transport.write(total_msg)
+
         except Exception as e:
             log.exception(e)
+            log.debug(f"Send echo: {self.msg.hex()!r} to {self.addr!r}")
+            self.transport.write(self.msg)
 
-        log.debug(f"Send: {msg.hex()!r} to {self.addr!r}")
-        self.transport.write(msg)
+    def data_received(self, msg):
+        self.msg = msg
+        log.debug(f"Received hex msg {self.msg.hex()!r} from {self.addr!r}")
+
+        try:
+            decoded, encoded = iso8583.decode(self.msg, spec)
+            log.debug(f"Decoded msg {utils.mask_ddk(decoded)!r} from {self.addr!r}")
+
+            messages = [decoded]
+
+            task = asyncio.create_task(oct.process_messages(messages, self.options))
+            task.add_done_callback(self.messages_processed)
+        except Exception as e:
+            log.exception(e)
+            log.debug(f"Send echo: {self.msg.hex()!r} to {self.addr!r}")
+            self.transport.write(self.msg)
 
         #print('Close the client socket')
         #self.transport.close()
@@ -64,7 +85,7 @@ async def start_server(options):
     loop = asyncio.get_running_loop()
 
     server = await loop.create_server(
-        lambda: ISO8583Protocol(),
+        lambda: ISO8583Protocol(options),
         options.host, options.port)
 
     addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
@@ -84,6 +105,31 @@ def serve():
             Option('--log-config', metavar='PATH', dest='logconfig',
                    default='log.conf', help='Logging configuration file '
                                             '(default: %default)'),
+            Option('--api-key', metavar='API_KEY', dest='api_key',
+                   default=os.environ.get('API_KEY'),
+                   help='API key for OCT service (default: %default)'),
+            Option('--secret-key', metavar='SECRET_KEY', dest='secret_key',
+                   default=os.environ.get('SECRET_KEY'),
+                   help='Secret key for OCT service (default: %default)'),
+            Option('--private-key', metavar='PATH', dest='pkey',
+                   default=os.environ.get('PRIVATE_KEY'),
+                   help='Private key full path for OCT service (default: %default)'),
+            Option('--oct-url', metavar='URL', dest='oct_url',
+                   default=None, help='OCT service url (default: %default) '
+                                      'For example https://some.host'),
+            Option('--oct-timeout', metavar='TIMEOUT', dest='oct_timeout',
+                   default=90, type=int, help='The maximal number of seconds for the '
+                                              'whole operation including connection '
+                                              'establishment, request sending and '
+                                              'response reading from oct service. '
+                                              '(default: %default)'),
+            Option('--oct-connect-timeout', metavar='TIMEOUT', dest='oct_connect_timeout',
+                   default=5, type=int, help='The maximal number of seconds for connecting '
+                                             'to a peer for a new connection (default: %default)'),
+            Option('--oct-read-timeout', metavar='TIMEOUT', dest='oct_read_timeout',
+                   default=90, type=int, help='The maximal number of seconds allowed for '
+                                              'period between reading a new data portion '
+                                              'from a peer. (default: %default)'),
             ]
     parser.add_options(opts)
     options, args = parser.parse_args(sys.argv)
