@@ -42,22 +42,24 @@ async def process_message(message, session, options):
             result = await resp.json()
             log.debug(f"result {result!r} for message with trx {trx!r}")
 
-            if resp.status == 200:
-                match result.get('status'):
-                    case "completed":
-                        message['39'] = '00'
-                    case "canceled":
-                        message['39'] = '05'
-                    case "new":
-                        message['39'] = '10'
-                    case "processing":
-                        message['39'] = '10'
-                    case _:
-                        message['39'] = '05'
-            elif resp.status == 400:
-                message['39'] = '05'
-            else:
-                message['39'] = '10'
+            match resp.status:
+                case 200:
+                    match result.get('status'):
+                        case "completed":
+                            message['39'] = '00'
+                        case "canceled":
+                            message['39'] = '05'
+                        case "new":
+                            message['39'] = '10'
+                        case "processing":
+                            message['39'] = '10'
+                        case _:
+                            message['39'] = '05'
+                case 400:
+                    message['39'] = '05'
+                case _:
+                    message['39'] = '10'
+
     except Exception as e:
         log.exception(e)
         message['39'] = '10'
