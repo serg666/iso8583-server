@@ -36,32 +36,36 @@ async def process_message(message, session, options):
         'x-signature': x_signature.decode('utf8'),
     }
 
-    async with session.post('/v1/orders/account2card', data=data, headers=headers) as resp:
-        log.debug(f"result http code {resp.status!r} for message with trx {trx!r}")
-        result = await resp.json()
-        log.debug(f"result {result!r} for message with trx {trx!r}")
+    try:
+        async with session.post('/v1/orders/account2card', data=data, headers=headers) as resp:
+            log.debug(f"result http code {resp.status!r} for message with trx {trx!r}")
+            result = await resp.json()
+            log.debug(f"result {result!r} for message with trx {trx!r}")
 
+            if resp.status == 200:
+                match result.get('status'):
+                    case "completed":
+                        message['39'] = '00'
+                    case "canceled":
+                        message['39'] = '05'
+                    case "new":
+                        message['39'] = '10'
+                    case "processing":
+                        message['39'] = '10'
+                    case _:
+                        message['39'] = '05'
+            elif resp.status == 400:
+                message['39'] = '05'
+            else:
+                message['39'] = '10'
+    except Exception as e:
+        log.exception(e)
+        message['39'] = '10'
+    finally:
         message['t'] = utils.build_response_mti(message['t'])
         message.pop('2', None)
 
-        if resp.status == 200:
-            match result.get('status'):
-                case "completed":
-                    message['39'] = '00'
-                case "canceled":
-                    message['39'] = '05'
-                case "new":
-                    message['39'] = '10'
-                case "processing":
-                    message['39'] = '10'
-                case _:
-                    message['39'] = '05'
-        elif resp.status == 400:
-            message['39'] = '05'
-        else:
-            message['39'] = '10'
-
-        return message
+    return message
 
 
 async def process_messages(messages, options):
