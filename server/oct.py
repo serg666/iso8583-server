@@ -39,11 +39,11 @@ async def process_message(message, session, options):
     try:
         async with session.post('/v1/orders/account2card', data=data, headers=headers) as resp:
             log.debug(f"result http code {resp.status!r} for message with trx {trx!r}")
-            result = await resp.json()
-            log.debug(f"result {result!r} for message with trx {trx!r}")
 
             match resp.status:
                 case 200:
+                    result = await resp.json()
+                    log.debug(f"result {result!r} for message with trx {trx!r}")
                     match result.get('status'):
                         case "completed":
                             message['39'] = '00'
@@ -56,8 +56,12 @@ async def process_message(message, session, options):
                         case _:
                             message['39'] = '05'
                 case 400:
+                    result = await resp.text()
+                    log.debug(f"result {result!r} for message with trx {trx!r}")
                     message['39'] = '05'
                 case _:
+                    result = await resp.text()
+                    log.debug(f"result {result!r} for message with trx {trx!r}")
                     message['39'] = '10'
 
     except Exception as e:
