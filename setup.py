@@ -22,7 +22,8 @@ setup(name='ISO8583Server',
       description='ISO8583 Server',
       long_description=README + '\n\n' + CHANGES,
       classifiers=[
-        "Programming Language :: Python",
+        "Programming Language :: Python :: 3.11",
+        "Topic :: Internet :: TCP"
       ],
       author='',
       author_email='',
