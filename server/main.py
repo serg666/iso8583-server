@@ -50,7 +50,8 @@ class ISO8583Protocol(asyncio.Protocol):
             total_msg = b''
             for message in messages:
                 msg, encoded = iso8583.encode(message, spec)
-                total_msg += msg
+                msg_length = len(msg)
+                total_msg += msg_length.to_bytes(2, 'big') + msg
 
             log.debug(f"Send processed: {total_msg.hex()!r} to {self.addr!r}")
             self.transport.write(total_msg)
@@ -63,12 +64,25 @@ class ISO8583Protocol(asyncio.Protocol):
     def data_received(self, msg):
         self.msg = msg
         log.debug(f"Received hex msg {self.msg.hex()!r} from {self.addr!r}")
+        messages = []
 
         try:
-            decoded, encoded = iso8583.decode(self.msg, spec)
-            log.debug(f"Decoded msg {utils.mask_ddk(decoded)!r} from {self.addr!r}")
+            while len(msg) > 0:
+                # @note: message length (first 2 bytes)
+                msg_len_encoded = msg[:2]
+                log.debug(f"Message length is {msg_len_encoded!r}")
+                if len(msg_len_encoded) < 2:
+                    raise AttributeError("Message length is less 2 bytes: {}".format(len(msg_len_encoded)))
 
-            messages = [decoded]
+                msg_len = int.from_bytes(msg_len_encoded, 'big')
+                log.debug(f"Decoded message length is {msg_len!r}")
+
+                msg_itself = msg[2: 2 + msg_len]
+                decoded, encoded = iso8583.decode(msg_itself, spec)
+                log.debug(f"Decoded msg {utils.mask_ddk(decoded)!r} from {self.addr!r}")
+                messages.append(decoded)
+
+                msg = msg[2 + msg_len:]
 
             task = asyncio.create_task(oct.process_messages(messages, self.options))
             task.add_done_callback(self.messages_processed)
