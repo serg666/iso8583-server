@@ -59,6 +59,10 @@ async def process_message(message, session, options):
                     result = await resp.text()
                     log.debug(f"result {result!r} for message with trx {trx!r}")
                     message['39'] = '05'
+                case 500:
+                    result = await resp.text()
+                    log.debug(f"result {result!r} for message with trx {trx!r}")
+                    message['39'] = '05'
                 case _:
                     result = await resp.text()
                     log.debug(f"result {result!r} for message with trx {trx!r}")
