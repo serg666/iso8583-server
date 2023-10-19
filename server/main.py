@@ -8,7 +8,7 @@ import optparse
 import server.utils as utils
 import server.oct as oct
 
-from iso8583.specs import default_ascii as spec
+from server.visa_sms import spec
 
 log = logging.getLogger(__name__)
 

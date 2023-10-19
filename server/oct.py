@@ -14,6 +14,14 @@ log = logging.getLogger(__name__)
 
 async def process_message(message, session, options):
     log.debug(f"process message: {utils.mask_ddk(message)!r}")
+
+    if message['t'] == '0800':
+        # @note: Echo test, logon, log off etc
+        message['t'] = utils.build_response_mti(message['t'])
+        message['39'] = '00'
+        message.pop('2', None)
+        return message
+
     trx = message['37']
     params = {
         "recipient_pan": message['2'],
