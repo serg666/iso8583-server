@@ -96,6 +96,4 @@ async def process_messages(messages, options):
         for message in messages:
             tasks.append(asyncio.ensure_future(process_message(message, session, options)))
 
-        processed_messages = await asyncio.gather(*tasks)
-
-    return processed_messages
+        return await asyncio.gather(*tasks)
