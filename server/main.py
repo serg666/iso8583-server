@@ -12,6 +12,8 @@ from server.visa_sms import spec
 
 log = logging.getLogger(__name__)
 
+# @note: count of bytes for message length
+MSG_LEN_BYTES = 2
 
 class OptionParser(optparse.OptionParser, object):
     def get_default_values(self):
@@ -51,7 +53,7 @@ class ISO8583Protocol(asyncio.Protocol):
             for message in messages:
                 msg, encoded = iso8583.encode(message, spec)
                 msg_length = len(msg)
-                total_msg += msg_length.to_bytes(2, 'big') + msg
+                total_msg += msg_length.to_bytes(MSG_LEN_BYTES, 'big') + msg
 
             log.debug(f"Send processed: {total_msg.hex()!r} to {self.addr!r}")
             self.transport.write(total_msg)
@@ -68,21 +70,21 @@ class ISO8583Protocol(asyncio.Protocol):
 
         try:
             while len(msg) > 0:
-                # @note: message length (first 2 bytes)
-                msg_len_encoded = msg[:2]
+                # @note: message length (first N bytes)
+                msg_len_encoded = msg[:MSG_LEN_BYTES]
                 log.debug(f"Message length is {msg_len_encoded!r}")
-                if len(msg_len_encoded) < 2:
-                    raise AttributeError("Message length is less 2 bytes: {}".format(len(msg_len_encoded)))
+                if len(msg_len_encoded) < MSG_LEN_BYTES:
+                    raise AttributeError("Message length is less {} bytes: {}".format(MSG_LEN_BYTES, len(msg_len_encoded)))
 
                 msg_len = int.from_bytes(msg_len_encoded, 'big')
                 log.debug(f"Decoded message length is {msg_len!r}")
 
-                msg_itself = msg[2: 2 + msg_len]
+                msg_itself = msg[MSG_LEN_BYTES: MSG_LEN_BYTES + msg_len]
                 decoded, encoded = iso8583.decode(msg_itself, spec)
                 log.debug(f"Decoded msg {utils.mask_ddk(decoded)!r} from {self.addr!r}")
                 messages.append(decoded)
 
-                msg = msg[2 + msg_len:]
+                msg = msg[MSG_LEN_BYTES + msg_len:]
 
             task = asyncio.create_task(oct.process_messages(messages, self.options))
             task.add_done_callback(self.messages_processed)

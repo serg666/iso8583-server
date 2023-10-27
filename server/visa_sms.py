@@ -2,7 +2,7 @@ from iso8583.specs import default as spec
 
 
 spec['h']['data_enc'] = 'b'
-spec['h']['max_len'] = 22
+spec['h']['max_len'] = 24
 
 spec['t']['data_enc'] = 'b'
 spec['t']['len_count'] = 'nibbles'
