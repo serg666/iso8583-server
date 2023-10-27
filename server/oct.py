@@ -5,6 +5,8 @@ import base64
 import json
 import server.utils as utils
 
+from uuid import uuid4
+
 from Crypto.Hash import SHA256
 from Crypto.PublicKey import RSA
 from Crypto.Signature import PKCS1_v1_5
@@ -53,6 +55,8 @@ async def process_message(message, session, options):
                         log.debug(f"result {result!r} for message with trx {trx!r}")
                         match result.get('status'):
                             case "completed":
+                                # @note: get auth code from response
+                                message['38'] = str(uuid4())[:6].upper()
                                 message['39'] = '00'
                             case "canceled":
                                 message['39'] = '05'
