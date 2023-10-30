@@ -23,6 +23,9 @@ async def process_message(message, session, options):
 
     if message['t'] == '0200':
         # @note: oct message
+        message['9'] = '61000000'
+        message['5'] = message['4']
+        message['50'] = message['49']
         trx = message['37']
         params = {
             "recipient_pan": message['2'],
@@ -82,6 +85,19 @@ async def process_message(message, session, options):
         except Exception as e:
             log.exception(e)
             message['39'] = '10'
+
+        # @note: just remove fields not in some list for 0210 msg
+        fields_to_remove = []
+        for k in message:
+            try:
+                int_k = int(k)
+                if int_k >= 2 and int_k not in (2,3,4,5,7,9,11,19,25,32,37,38,39,41,42,43,49,50):
+                    fields_to_remove.append(k)
+            except:
+                pass
+        log.debug('Fields to removed: {}'.format(fields_to_remove))
+        removed = [message.pop(field, None) for field in fields_to_remove]
+        log.debug('Removed: {}'.format(removed))
 
     message['t'] = utils.build_response_mti(message['t'])
 
