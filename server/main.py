@@ -13,7 +13,8 @@ from server.visa_sms import spec
 log = logging.getLogger(__name__)
 
 # @note: count of bytes for message length
-MSG_LEN_BYTES = 2
+MSG_LEN_BYTES = 4
+MSG_LEN_BYTES_REAL = 2
 
 class OptionParser(optparse.OptionParser, object):
     def get_default_values(self):
@@ -53,7 +54,9 @@ class ISO8583Protocol(asyncio.Protocol):
             for message in messages:
                 msg, encoded = iso8583.encode(message, spec)
                 msg_length = len(msg)
-                total_msg += msg_length.to_bytes(MSG_LEN_BYTES, 'big') + msg
+                msg_length_decoded = msg_length.to_bytes(MSG_LEN_BYTES, 'big')[MSG_LEN_BYTES_REAL:] + \
+                    msg_length.to_bytes(MSG_LEN_BYTES, 'big')[:MSG_LEN_BYTES_REAL]
+                total_msg += msg_length_decoded + msg[:3] + msg_length.to_bytes(MSG_LEN_BYTES, 'big')[MSG_LEN_BYTES_REAL:] + msg[3 + MSG_LEN_BYTES_REAL:]
 
             log.debug(f"Send processed: {total_msg.hex()!r} to {self.addr!r}")
             self.transport.write(total_msg)
@@ -76,7 +79,8 @@ class ISO8583Protocol(asyncio.Protocol):
                 if len(msg_len_encoded) < MSG_LEN_BYTES:
                     raise AttributeError("Message length is less {} bytes: {}".format(MSG_LEN_BYTES, len(msg_len_encoded)))
 
-                msg_len = int.from_bytes(msg_len_encoded, 'big')
+                # @note: use only first REAL bytes as length
+                msg_len = int.from_bytes(msg_len_encoded[:MSG_LEN_BYTES_REAL], 'big')
                 log.debug(f"Decoded message length is {msg_len!r}")
 
                 msg_itself = msg[MSG_LEN_BYTES: MSG_LEN_BYTES + msg_len]
