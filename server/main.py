@@ -63,12 +63,11 @@ class ISO8583Protocol(asyncio.Protocol):
 
         except Exception as e:
             log.exception(e)
-            log.debug(f"Send echo: {self.msg.hex()!r} to {self.addr!r}")
-            self.transport.write(self.msg)
+            # @note: bank will get time out
+            log.debug("Send nothing")
 
     def data_received(self, msg):
-        self.msg = msg
-        log.debug(f"Received hex msg {self.msg.hex()!r} from {self.addr!r}")
+        log.debug(f"Received hex msg {msg.hex()!r} from {self.addr!r}")
         messages = []
 
         try:
@@ -94,11 +93,8 @@ class ISO8583Protocol(asyncio.Protocol):
             task.add_done_callback(self.messages_processed)
         except Exception as e:
             log.exception(e)
-            log.debug(f"Send echo: {self.msg.hex()!r} to {self.addr!r}")
-            self.transport.write(self.msg)
-
-        #print('Close the client socket')
-        #self.transport.close()
+            # @note: bank will get time out
+            log.debug("Send nothing")
 
 
 async def start_server(options):

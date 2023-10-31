@@ -22,82 +22,90 @@ async def process_message(message, session, options):
         message['39'] = '00'
 
     if message['t'] == '0200':
-        # @note: oct message
-        message['9'] = '61000000'
-        message['5'] = message['4']
-        message['50'] = message['49']
-        trx = message['37']
-        params = {
-            "recipient_pan": message['2'],
-            "amount": message['4'],
-            "transaction": trx,
-            "description": "payout_{}".format(trx)
-        }
-
-        data = json.dumps(params, separators=(',', ':'), sort_keys=True)
-
-        key = RSA.importKey(open(options.pkey).read())
-        digest = SHA256.new('{}{}'.format(data, options.secret_key).encode('utf8'))
-        signer = PKCS1_v1_5.new(key)
-        signature = signer.sign(digest)
-        x_signature = base64.b64encode(signature)
-
-        headers = {
-            'Content-Type': 'application/json; charset=UTF-8',
-            'x-api-key': options.api_key,
-            'x-signature': x_signature.decode('utf8'),
-        }
-
         try:
-            async with session.post('/v1/orders/account2card', data=data, headers=headers) as resp:
-                log.debug(f"result http code {resp.status!r} for message with trx {trx!r}")
+            # @note: oct message
+            message['9'] = '61000000'
+            message['5'] = message['4']
+            message['50'] = message['49']
+            trx = message['37']
+            params = {
+                "recipient_pan": message['2'],
+                "amount": message['4'],
+                "transaction": trx,
+                "description": "payout_{}".format(trx)
+            }
 
-                match resp.status:
-                    case 200:
-                        result = await resp.json()
-                        log.debug(f"result {result!r} for message with trx {trx!r}")
-                        match result.get('status'):
-                            case "completed":
-                                # @note: get auth code from response
-                                message['38'] = str(uuid4())[:6].upper()
-                                message['39'] = '00'
-                            case "canceled":
-                                message['39'] = '05'
-                            case "new":
-                                message['39'] = '10'
-                            case "processing":
-                                message['39'] = '10'
-                            case _:
-                                message['39'] = '05'
-                    case 400:
-                        result = await resp.text()
-                        log.debug(f"result {result!r} for message with trx {trx!r}")
-                        message['39'] = '05'
-                    case 500:
-                        result = await resp.text()
-                        log.debug(f"result {result!r} for message with trx {trx!r}")
-                        message['39'] = '05'
-                    case _:
-                        result = await resp.text()
-                        log.debug(f"result {result!r} for message with trx {trx!r}")
-                        message['39'] = '10'
+            data = json.dumps(params, separators=(',', ':'), sort_keys=True)
+
+            key = RSA.importKey(open(options.pkey).read())
+            digest = SHA256.new('{}{}'.format(data, options.secret_key).encode('utf8'))
+            signer = PKCS1_v1_5.new(key)
+            signature = signer.sign(digest)
+            x_signature = base64.b64encode(signature)
+
+            headers = {
+                'Content-Type': 'application/json; charset=UTF-8',
+                'x-api-key': options.api_key,
+                'x-signature': x_signature.decode('utf8'),
+            }
+
+            try:
+                async with session.post('/v1/orders/account2card', data=data, headers=headers) as resp:
+                    log.debug(f"result http code {resp.status!r} for message with trx {trx!r}")
+
+                    match resp.status:
+                        case 200:
+                            result = await resp.json()
+                            log.debug(f"result {result!r} for message with trx {trx!r}")
+                            match result.get('status'):
+                                case "completed":
+                                    # @note: get auth code from response
+                                    message['38'] = str(uuid4())[:6].upper()
+                                    message['39'] = '00'
+                                case "canceled":
+                                    message['39'] = '05'
+                                case "new":
+                                    message['39'] = '10'
+                                case "processing":
+                                    message['39'] = '10'
+                                case _:
+                                    message['39'] = '05'
+                        case 400:
+                            result = await resp.text()
+                            log.debug(f"result {result!r} for message with trx {trx!r}")
+                            message['39'] = '05'
+                        case 500:
+                            result = await resp.text()
+                            log.debug(f"result {result!r} for message with trx {trx!r}")
+                            message['39'] = '05'
+                        case _:
+                            result = await resp.text()
+                            log.debug(f"result {result!r} for message with trx {trx!r}")
+                            message['39'] = '10'
+
+            except Exception as e:
+                log.exception(e)
+                message['39'] = '10'
 
         except Exception as e:
+            # @note: if there is no required fields or smth get wrong,
+            # send 210 message with 05 code
             log.exception(e)
-            message['39'] = '10'
+            message['39'] = '05'
+        finally:
+            # @note: just remove fields not in some list for 0210 msg
+            fields_to_remove = []
+            for k in message:
+                try:
+                    int_k = int(k)
+                    if int_k >= 2 and int_k not in (2,3,4,5,7,9,11,19,25,32,37,38,39,41,42,43,49,50):
+                        fields_to_remove.append(k)
+                except:
+                    pass
+            log.debug('Fields to removed: {}'.format(fields_to_remove))
+            removed = [message.pop(field, None) for field in fields_to_remove]
+            log.debug('Removed: {}'.format(removed))
 
-        # @note: just remove fields not in some list for 0210 msg
-        fields_to_remove = []
-        for k in message:
-            try:
-                int_k = int(k)
-                if int_k >= 2 and int_k not in (2,3,4,5,7,9,11,19,25,32,37,38,39,41,42,43,49,50):
-                    fields_to_remove.append(k)
-            except:
-                pass
-        log.debug('Fields to removed: {}'.format(fields_to_remove))
-        removed = [message.pop(field, None) for field in fields_to_remove]
-        log.debug('Removed: {}'.format(removed))
 
     message['t'] = utils.build_response_mti(message['t'])
 
