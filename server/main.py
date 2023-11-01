@@ -46,17 +46,33 @@ class ISO8583Protocol(asyncio.Protocol):
     def connection_lost(self, exc):
         log.debug(f"Connection to {self.addr!r} closed")
 
+    def _encode_message(self, message):
+        encoded_msg = b''
+
+        msg, encoded = iso8583.encode(message, spec)
+        msg_length = len(msg)
+        msg_length_decoded = msg_length.to_bytes(MSG_LEN_BYTES, 'big')[MSG_LEN_BYTES_REAL:] + \
+            msg_length.to_bytes(MSG_LEN_BYTES, 'big')[:MSG_LEN_BYTES_REAL]
+        encoded_msg += msg_length_decoded + msg[:3] + msg_length.to_bytes(MSG_LEN_BYTES, 'big')[MSG_LEN_BYTES_REAL:] + msg[3 + MSG_LEN_BYTES_REAL:]
+
+        return encoded_msg
+
+    def message_processed(self, task):
+        try:
+            encoded_msg = self._encode_message(task.result())
+            log.debug(f"Send processed: {encoded_msg.hex()!r} to {self.addr!r}")
+            self.transport.write(encoded_msg)
+
+        except Exception as e:
+            log.exception(e)
+            # @note: bank will get time out
+            log.debug("Send nothing")
+
     def messages_processed(self, task):
         try:
-            messages = task.result()
-
             total_msg = b''
-            for message in messages:
-                msg, encoded = iso8583.encode(message, spec)
-                msg_length = len(msg)
-                msg_length_decoded = msg_length.to_bytes(MSG_LEN_BYTES, 'big')[MSG_LEN_BYTES_REAL:] + \
-                    msg_length.to_bytes(MSG_LEN_BYTES, 'big')[:MSG_LEN_BYTES_REAL]
-                total_msg += msg_length_decoded + msg[:3] + msg_length.to_bytes(MSG_LEN_BYTES, 'big')[MSG_LEN_BYTES_REAL:] + msg[3 + MSG_LEN_BYTES_REAL:]
+            for message in task.result():
+                total_msg += self._encode_message(message)
 
             log.debug(f"Send processed: {total_msg.hex()!r} to {self.addr!r}")
             self.transport.write(total_msg)
@@ -87,10 +103,12 @@ class ISO8583Protocol(asyncio.Protocol):
                 log.debug(f"Decoded msg {utils.mask_ddk(decoded)!r} from {self.addr!r}")
                 messages.append(decoded)
 
+                asyncio.create_task(oct.process_one_message(decoded, self.options)).add_done_callback(self.message_processed)
+
                 msg = msg[MSG_LEN_BYTES + msg_len:]
 
-            task = asyncio.create_task(oct.process_messages(messages, self.options))
-            task.add_done_callback(self.messages_processed)
+            #task = asyncio.create_task(oct.process_messages(messages, self.options))
+            #task.add_done_callback(self.messages_processed)
         except Exception as e:
             log.exception(e)
             # @note: bank will get time out

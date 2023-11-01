@@ -125,3 +125,15 @@ async def process_messages(messages, options):
             tasks.append(asyncio.ensure_future(process_message(message, session, options)))
 
         return await asyncio.gather(*tasks)
+
+
+
+async def process_one_message(message, options):
+    timeout = aiohttp.ClientTimeout(
+        total=options.oct_timeout,
+        connect=options.oct_connect_timeout,
+        sock_connect=options.oct_connect_timeout,
+        sock_read=options.oct_read_timeout
+    )
+    async with aiohttp.ClientSession(options.oct_url, timeout=timeout, trust_env=True) as session:
+        return await process_message(message, session, options)
