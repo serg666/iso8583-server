@@ -47,15 +47,11 @@ class ISO8583Protocol(asyncio.Protocol):
         log.debug(f"Connection to {self.addr!r} closed")
 
     def _encode_message(self, message):
-        encoded_msg = b''
-
         msg, encoded = iso8583.encode(message, spec)
         msg_length = len(msg)
         msg_length_decoded = msg_length.to_bytes(MSG_LEN_BYTES, 'big')[MSG_LEN_BYTES_REAL:] + \
             msg_length.to_bytes(MSG_LEN_BYTES, 'big')[:MSG_LEN_BYTES_REAL]
-        encoded_msg += msg_length_decoded + msg[:3] + msg_length.to_bytes(MSG_LEN_BYTES, 'big')[MSG_LEN_BYTES_REAL:] + msg[3 + MSG_LEN_BYTES_REAL:]
-
-        return encoded_msg
+        return msg_length_decoded + msg[:3] + msg_length.to_bytes(MSG_LEN_BYTES, 'big')[MSG_LEN_BYTES_REAL:] + msg[3 + MSG_LEN_BYTES_REAL:]
 
     def message_processed(self, task):
         try:
